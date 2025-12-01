@@ -2,6 +2,9 @@
 #define SCHEDULAR_H
 
 #include <boost/context/continuation.hpp>
+#include <cstddef>
+#include <cstdint>
+#include <x86intrin.h>
 #include <iostream>
 #include <thread>
 #include "queues/queue.h"
@@ -25,10 +28,13 @@ public:
     uxsched(int id);
     ~uxsched();
     // spawn a fiber and add it to runqueue
-    fiber_t<F>* spawn(F func, int stack_size, int fiber_id);
+    fiber_t<F>* spawn(F func, int stack_size, int fiber_id, int cycle_budget = 10000);
 
-    // halt current fiber and run the next one.
-    void yeild();
+    /*  safepoint check that gets added by the user inside the fiber.
+        this is used to add a safepoint where the schedular can check if 
+        the fiber exceeds the execution time designated.
+    */ 
+    void safepoint_check();
 };
 
 template <typename F>
@@ -51,7 +57,7 @@ uxsched<F>::~uxsched(){
 }
 
 template <typename F>
-fiber_t<F>* uxsched<F>::spawn(F func, int stack_size, int fiber_id){
+fiber_t<F>* uxsched<F>::spawn(F func, int stack_size, int fiber_id, int cycle_budget){
 
     //add it to the runqueue
     fiber_t<F>* f = new fiber_t<F>();
@@ -59,20 +65,30 @@ fiber_t<F>* uxsched<F>::spawn(F func, int stack_size, int fiber_id){
     f->func = std::move(func);
     f->stack_size = stack_size;
     f->fiber_id = fiber_id;
-
-    f->ctx = boost::context::callcc([f](boost::context::continuation&& parent){
-        std::cout << "making fiber: " << f->fiber_id << std::endl;
-        parent=parent.resume();
-
-        std::cout << "running fiber: " << f->fiber_id << std::endl;
-        f->func();
-        return std::move(parent);
-    });
+    f->cycle_budget = cycle_budget;
 
     // enqueue this f
     std::cout << "enqueue fiber: " << f->fiber_id << std::endl;
     _queue->enqueue(f);
     return f;
+}
+
+template <typename F>
+void uxsched<F>::safepoint_check(){
+    fiber_t<F>* f = nullptr;
+    _worker->get_current_fiber(f);
+
+    if(!f){return;}
+    
+    // yeild only when the budget is exceeded;
+    uint64_t now = __rdtsc();
+    if(now - f->start_tsc < f->cycle_budget){
+        return;
+    }
+
+    f->yeild = true;
+    f->runner_ctx = std::move(f->runner_ctx).resume();
+    
 }
 
 #endif
