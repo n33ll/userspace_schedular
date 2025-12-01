@@ -66,7 +66,6 @@ bool spsc_queue<T>::dequeue(T& m){
     head = (head + 1)%buffer_capacity;
     m = ring_buffer[head];
     packets.fetch_sub(1,std::memory_order_seq_cst);
-    std::cout << "dequeue spsc " << m->fiber_id << std::endl;
     return true;
 }
 
