@@ -11,6 +11,7 @@
 #include "queues/spsc_queue.h"
 #include "runner/runner.h"
 #include "loaders/rr_loader.h"
+#include "loaders/a_hash_loader.h"
 #include "fiber_t.h"
 
 template <typename F>
@@ -23,7 +24,7 @@ private:
     std::vector<runner<F>*> _workers;
     std::vector<std::thread> _threads;
 
-    rr_loader<F>* _loader;
+    ah_loader<F>* _loader;
 
     void pin_thread_to_core(std::thread& thread, int core_id);
 
@@ -60,7 +61,7 @@ uxsched<F>::uxsched(int id, int queue_size){
     }
 
     std::vector<queue<fiber_t<F>*>*>* _qs_ptr = &_queues;
-    _loader = new rr_loader<F>(_schedular_id, _qs_ptr);
+    _loader = new ah_loader<F>(_schedular_id, _qs_ptr);
 
     std::cout<<"schedular initializing done \n";
 }
