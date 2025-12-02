@@ -9,23 +9,27 @@
 #include <thread>
 #include "queues/queue.h"
 #include "queues/spsc_queue.h"
-#include "../runner/runner.h"
+#include "runner/runner.h"
+#include "loaders/rr_loader.h"
 #include "fiber_t.h"
 
 template <typename F>
 class uxsched{
 private:
     int _schedular_id;
-    // queue
-    queue<fiber_t<F>*>* _queue;
+    int _queue_size;
+    int _num_cores;
+    std::vector<queue<fiber_t<F>*>*> _queues;
+    std::vector<runner<F>*> _workers;
+    std::vector<std::thread> _threads;
 
-    // runner
-    runner<F>* _worker;
-    std::thread _worker_thread;
+    rr_loader<F>* _loader;
+
+    void pin_thread_to_core(std::thread& thread, int core_id);
 
 public:
     // prepare the schedular
-    uxsched(int id);
+    uxsched(int id, int queue_size);
     ~uxsched();
     // spawn a fiber and add it to runqueue
     fiber_t<F>* spawn(F func, int stack_size, int fiber_id, int cycle_budget = 10000);
@@ -34,26 +38,43 @@ public:
         this is used to add a safepoint where the schedular can check if 
         the fiber exceeds the execution time designated.
     */ 
-    void safepoint_check();
+    void safepoint_check(int runner_id);
 };
 
 template <typename F>
-uxsched<F>::uxsched(int id){
-    //initialize the queue
+uxsched<F>::uxsched(int id, int queue_size){
     _schedular_id = id;
-    _queue = new spsc_queue<fiber_t<F>*>(10);
+    _queue_size = queue_size;
 
-    //start the runner
-    _worker = new runner<F>(_queue , _schedular_id);
-    _worker_thread = std::thread(&runner<F>::run, _worker);
+    _num_cores = sysconf(_SC_NPROCESSORS_ONLN);
+    std::cout << "here\n";
+    _queues.resize(_num_cores);
+    _workers.resize(_num_cores);
+    _threads.resize(_num_cores);
+    std::cout << "here\n";
+    for(int i = 0; i < _num_cores; ++i){
+        _queues[i] = new spsc_queue<fiber_t<F>*>(_queue_size);
+        _workers[i] = new runner<F>(_queues[i], i);
+        _threads[i] = std::thread(&runner<F>::run, _workers[i]);
+        pin_thread_to_core(_threads[i], i); // Pin each thread to its core
+    }
+
+    std::vector<queue<fiber_t<F>*>*>* _qs_ptr = &_queues;
+    _loader = new rr_loader<F>(_schedular_id, _qs_ptr);
 
     std::cout<<"schedular initializing done \n";
 }
 
 template <typename F>
 uxsched<F>::~uxsched(){
-    _queue->close();
-    if (_worker_thread.joinable()){_worker_thread.join();}
+    /* this is being commented out since after schedular is deleted the queue 
+    should not close without checks as there may still be tasks */
+    //for(auto q : _queues){q->close();}
+    
+    //weird why for(auto t : _threads) doesnt work
+    for(auto t = _threads.begin();t!=_threads.end();t++){
+        if(t->joinable()){t->join();}
+    }
 }
 
 template <typename F>
@@ -69,14 +90,17 @@ fiber_t<F>* uxsched<F>::spawn(F func, int stack_size, int fiber_id, int cycle_bu
 
     // enqueue this f
     std::cout << "enqueue fiber: " << f->fiber_id << std::endl;
-    _queue->enqueue(f);
+    _loader->load(f);
     return f;
 }
 
 template <typename F>
-void uxsched<F>::safepoint_check(){
+void uxsched<F>::safepoint_check(int runner_id){
     fiber_t<F>* f = nullptr;
-    _worker->get_current_fiber(f);
+
+    // crux of the issue :
+    // we donot know from what worker safepoint_check is being called.
+    _workers[runner_id]->get_current_fiber(f);
 
     if(!f){return;}
     
@@ -91,4 +115,14 @@ void uxsched<F>::safepoint_check(){
     
 }
 
+template <typename F>
+void uxsched<F>::pin_thread_to_core(std::thread& thread, int core_id){
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core_id, &cpuset);
+    int rc = pthread_setaffinity_np(thread.native_handle(), sizeof(cpu_set_t), &cpuset);
+    if (rc != 0) {
+        std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+    }
+}
 #endif
