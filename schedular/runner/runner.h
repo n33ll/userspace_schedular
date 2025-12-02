@@ -1,8 +1,8 @@
 #ifndef RUNNER_H
 #define RUNNER_H
 
-#include "../schedular/fiber_t.h"
-#include "../schedular/queues/queue.h"
+#include "../fiber_t.h"
+#include "../queues/queue.h"
 #include <emmintrin.h>
 #include <iostream>
 
@@ -56,11 +56,11 @@ void runner<F>::run(){
         // context on future dequeues of the same fiber. 
         if(!f->context_initialized){
             f->context_initialized = true;
-            f->f_ctx = boost::context::callcc([f](boost::context::continuation&& runner){
+            f->f_ctx = boost::context::callcc([f, this](boost::context::continuation&& runner){
                 f->runner_ctx = std::move(runner);
 
                 //std::cout << "running fiber: " << f->fiber_id << std::endl;
-                f->func();
+                f->func(_runner_id);
                 return std::move(runner);
             });
         }else{
