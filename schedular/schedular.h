@@ -13,6 +13,7 @@
 #include "loaders/rr_loader.h"
 #include "loaders/a_hash_loader.h"
 #include "fiber_t.h"
+#include "stealer/nonnuma_stealer.h"
 
 template <typename F>
 class uxsched{
@@ -23,6 +24,7 @@ private:
     std::vector<queue<fiber_t<F>*>*> _queues;
     std::vector<runner<F>*> _workers;
     std::vector<std::thread> _threads;
+    nonnuma_stealer<F>* _stealer;
 
     ah_loader<F>* _loader;
 
@@ -48,20 +50,23 @@ uxsched<F>::uxsched(int id, int queue_size){
     _queue_size = queue_size;
 
     _num_cores = sysconf(_SC_NPROCESSORS_ONLN);
-    std::cout << "here\n";
     _queues.resize(_num_cores);
     _workers.resize(_num_cores);
     _threads.resize(_num_cores);
-    std::cout << "here\n";
+
     for(int i = 0; i < _num_cores; ++i){
         _queues[i] = new spsc_queue<fiber_t<F>*>(_queue_size);
-        _workers[i] = new runner<F>(_queues[i], i);
-        _threads[i] = std::thread(&runner<F>::run, _workers[i]);
-        pin_thread_to_core(_threads[i], i); // Pin each thread to its core
     }
 
     std::vector<queue<fiber_t<F>*>*>* _qs_ptr = &_queues;
     _loader = new ah_loader<F>(_schedular_id, _qs_ptr);
+    _stealer = new nonnuma_stealer<F>(_schedular_id, _qs_ptr);
+
+    for(int i{0};i< _num_cores; ++i){
+        _workers[i] = new runner<F>(i, _queues[i], _stealer);
+        _threads[i] = std::thread(&runner<F>::run, _workers[i]);
+        pin_thread_to_core(_threads[i], i); // Pin each thread to its core
+    }
 
     std::cout<<"schedular initializing done \n";
 }
@@ -113,7 +118,6 @@ void uxsched<F>::safepoint_check(int runner_id){
 
     f->yeild = true;
     f->runner_ctx = std::move(f->runner_ctx).resume();
-    
 }
 
 template <typename F>
