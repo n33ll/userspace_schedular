@@ -40,4 +40,10 @@ void rr_loader<F>::load(fiber_t<F>* f){
     }
 }
 
+template <typename F>
+void rr_loader<F>::load(fiber_t<F>* f, int q_id){
+    queue<fiber_t<F>*>* q = _queues->at(q_id);
+    q->enqueue(f);
+}
+
 #endif
