@@ -5,23 +5,26 @@
 #include "../queues/queue.h"
 #include <emmintrin.h>
 #include <iostream>
+#include "../stealer/nonnuma_stealer.h"
 
 template <typename F>
 class runner{
 private:
     int _runner_id;
     queue<fiber_t<F>*>* _queue;
+    nonnuma_stealer<F>* _stealer;
     fiber_t<F>* _current_fiber;
 
 public: 
-    runner(queue<fiber_t<F>*>* q, int id);
+    runner(int id, queue<fiber_t<F>*>* queue, nonnuma_stealer<F>* stealer);
     void run();
     void get_current_fiber(fiber_t<F>* &current_fiber);
 };
 
 template <typename F>
-runner<F>::runner(queue<fiber_t<F>*>* q, int id){
-    _queue = q;
+runner<F>::runner(int id, queue<fiber_t<F>*>* queue, nonnuma_stealer<F>* stealer){
+    _queue = queue;
+    _stealer = stealer;
     _runner_id = id;
     _current_fiber = nullptr;
     std::cout << "runner initialized \n";
@@ -38,9 +41,13 @@ void runner<F>::run(){
                 std::cout << "runner stops as queue is closed \n";
                 return;
             }
-            std::cout << "queue empty, pausing\n";
-            _mm_pause();
-            continue;
+            std::cout << "queue empty, stealing\n";
+
+            // get from stealer, if unsuccesfull then pause and retry, otherwise execute f.
+            if(!_stealer->get(f)){
+                _mm_pause();
+                continue;
+            }
         }
 
         if (f == nullptr) {
