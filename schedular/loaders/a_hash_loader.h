@@ -32,6 +32,12 @@ void ah_loader<F>::load(fiber_t<F>* f){
     q->enqueue(f);
 }
 
+template <typename F>
+void ah_loader<F>::load(fiber_t<F>* f, int q_id){
+    queue<fiber_t<F>*>* q = _queues->at(q_id);
+    q->enqueue(f);
+}
+
 static inline uint32_t fast_hash(uint64_t x) {
     x ^= x >> 33;
     x *= 0xff51afd7ed558ccdULL;
