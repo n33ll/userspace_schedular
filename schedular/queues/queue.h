@@ -9,6 +9,7 @@ public:
 
     virtual void close() = 0;
     virtual bool is_closed() const = 0;
+    virtual int size() const = 0;
 };
 
 #endif

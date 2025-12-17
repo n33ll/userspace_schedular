@@ -32,6 +32,7 @@ public:
     bool dequeue(T& m) override;
     void close() override;
     bool is_closed() const override;
+    int size() const override;
 };
 
 template<typename T>
@@ -81,6 +82,11 @@ void spsc_queue<T>::close(){
 template<typename T>
 bool spsc_queue<T>::is_closed() const{
     return closed.load(std::memory_order_seq_cst);
+}
+
+template<typename T>
+int spsc_queue<T>::size() const{
+    return packets.load(std::memory_order_acquire);
 }
 
 #endif
