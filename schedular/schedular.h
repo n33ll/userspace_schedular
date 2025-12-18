@@ -14,6 +14,8 @@
 #include "loaders/a_hash_loader.h"
 #include "fiber_t.h"
 #include "stealer/nonnuma_stealer.h"
+#include <numa.h>
+#include <sched.h>
 
 template <typename F>
 class uxsched{
@@ -54,8 +56,13 @@ uxsched<F>::uxsched(int id, int queue_size){
     _workers.resize(_num_cores);
     _threads.resize(_num_cores);
 
-    for(int i = 0; i < _num_cores; ++i){
-        _queues[i] = new spsc_queue<fiber_t<F>*>(_queue_size);
+    for(int i{0}; i < _num_cores; ++i){
+        int numa_node = 0;
+        if (numa_available() >= 0) {
+            numa_node = numa_node_of_cpu(i);
+        }
+        spsc_queue<fiber_t<F>*>* q = new spsc_queue<fiber_t<F>*>(_queue_size, i, numa_node);
+        _queues[i] = q;
     }
 
     std::vector<queue<fiber_t<F>*>*>* _qs_ptr = &_queues;
