@@ -16,15 +16,19 @@ private:
     std::vector<T> ring_buffer;
     std::atomic<bool> closed;
 
+    int _cpu_id;
+    int _numa_node;
+
     int tail;
     int head;
 
 public:
-    spsc_queue(int capacity): buffer_capacity(capacity){
+    spsc_queue(int capacity, int cpu_id = 0, int numa_node = 0): 
+        buffer_capacity(capacity), _cpu_id(cpu_id), _numa_node(numa_node) {
         ring_buffer.resize(capacity);
         tail = 0;
         head = 0;
-        packets.store(0,std::memory_order_seq_cst);
+        packets.store(0, std::memory_order_seq_cst);
         closed.store(false, std::memory_order_release);
     };
 
@@ -33,6 +37,7 @@ public:
     void close() override;
     bool is_closed() const override;
     int size() const override;
+    int get_numa_node() const;
 };
 
 template<typename T>
@@ -87,6 +92,11 @@ bool spsc_queue<T>::is_closed() const{
 template<typename T>
 int spsc_queue<T>::size() const{
     return packets.load(std::memory_order_acquire);
+}
+
+template<typename T>
+int spsc_queue<T>::get_numa_node() const{
+    return this->_numa_node;
 }
 
 #endif
