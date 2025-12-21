@@ -3,6 +3,7 @@
 
 #include "../fiber_t.h"
 #include "../queues/queue.h"
+#include <atomic>
 #include <emmintrin.h>
 #include <iostream>
 #include "../stealer/nonnuma_stealer.h"
@@ -14,10 +15,13 @@ private:
     queue<fiber_t<F>*>* _queue;
     nonnuma_stealer<F>* _stealer;
     fiber_t<F>* _current_fiber;
+    std::atomic<bool> _running;
 
 public: 
     runner(int id, queue<fiber_t<F>*>* queue, nonnuma_stealer<F>* stealer);
     void run();
+    void close();
+    bool is_closed();
     void get_current_fiber(fiber_t<F>* &current_fiber);
 };
 
@@ -27,23 +31,22 @@ runner<F>::runner(int id, queue<fiber_t<F>*>* queue, nonnuma_stealer<F>* stealer
     _stealer = stealer;
     _runner_id = id;
     _current_fiber = nullptr;
+    _running.store(true,std::memory_order_release);
     std::cout << "runner initialized \n";
 }
 
 template <typename F>
 void runner<F>::run(){
-    std::cout << "runner running \n";
-    while(true){
+    std::cout << "runner " << _runner_id << " starting \n";
+    while(_running.load(std::memory_order_acquire)){
         fiber_t<F>* f = nullptr;
         
         if(!_queue->dequeue(f)){
             if(_queue->is_closed()){
-                std::cout << "runner stops as queue is closed \n";
+                std::cout << "runner " << _runner_id << " stops as queue is closed \n";
                 return;
             }
-            std::cout << "queue empty, stealing\n";
 
-            // get from stealer, if unsuccesfull then pause and retry, otherwise execute f.
             if(!_stealer->get(f)){
                 _mm_pause();
                 continue;
@@ -51,7 +54,6 @@ void runner<F>::run(){
         }
 
         if (f == nullptr) {
-            std::cerr << "Error: dequeued nullptr fiber!" << std::endl;
             continue;
         }      
         //execute the fiber
@@ -68,7 +70,8 @@ void runner<F>::run(){
 
                 //std::cout << "running fiber: " << f->fiber_id << std::endl;
                 f->func(_runner_id);
-                return std::move(runner);
+                
+                return std::move(f->runner_ctx);
             });
         }else{
             f->f_ctx = std::move(f->f_ctx).resume();
@@ -76,9 +79,13 @@ void runner<F>::run(){
 
         _current_fiber = nullptr;
         
+        // only re-enqueue if fiber yielded
         if(f->yeild){
             f->yeild = false;
             _queue->enqueue(f);
+        } else {
+            // Fiber finished, clean it up
+            delete f;
         }
     }
 }
@@ -86,6 +93,16 @@ void runner<F>::run(){
 template <typename F>
 void runner<F>::get_current_fiber(fiber_t<F>* &current_fiber){
     current_fiber = _current_fiber;
+}
+
+template <typename F>
+void runner<F>::close(){
+    _running.store(false, std::memory_order_release);
+}
+
+template <typename F>
+bool runner<F>::is_closed(){
+    return !_running.load(std::memory_order_acquire);
 }
 
 #endif
