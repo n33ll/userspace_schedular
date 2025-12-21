@@ -16,7 +16,7 @@ private:
     
 public:
     nonnuma_stealer(int id, std::vector<queue<fiber_t<F>*>*>*& queues);
-    bool get(fiber_t<F>& m);
+    bool get(fiber_t<F>*& m);
 };
 
 template <typename F>
@@ -26,7 +26,7 @@ nonnuma_stealer<F>::nonnuma_stealer(int id, std::vector<queue<fiber_t<F>*>*>*& q
 }
 
 template <typename F>
-bool nonnuma_stealer<F>::get(fiber_t<F>& m){
+bool nonnuma_stealer<F>::get(fiber_t<F>*& m){
     int num_queues = _queues->size();
     for (int i{0}; i < num_queues; ++i) {
         queue<fiber_t<F>*>* q = _queues->at(i);
