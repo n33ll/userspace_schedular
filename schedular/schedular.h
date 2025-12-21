@@ -80,14 +80,18 @@ uxsched<F>::uxsched(int id, int queue_size){
 
 template <typename F>
 uxsched<F>::~uxsched(){
-    /* this is being commented out since after schedular is deleted the queue 
-    should not close without checks as there may still be tasks */
-    //for(auto q : _queues){q->close();}
-    
-    //weird why for(auto t : _threads) doesnt work
-    for(auto t = _threads.begin();t!=_threads.end();t++){
-        if(t->joinable()){t->join();}
+    std::cout << "Destructor: Closing queues and runners..." << std::endl;
+    for(auto q : _queues){
+        q->close();
     }
+    
+    std::cout << "Destructor: Waiting for threads to join..." << std::endl;
+    for(auto t = _threads.begin(); t != _threads.end(); t++){
+        if(t->joinable()){
+            t->join();
+        }
+    }
+    std::cout << "Destructor: All threads joined." << std::endl;
 }
 
 template <typename F>
