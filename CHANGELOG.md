@@ -3,6 +3,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [3.0.0] - 2025-12-28
+### Added
+ - Update dequeue to handle concurrent calls
+ - runner.h: add close() and is_closed() member functions.
+ - Update destructor for gracefull exit.
+ - Correct the argument of get() member function to pass as reference.
+ - Add MPMC queue
+ - Incorporate MPMC queues in schedular and general fixes
+ - Add benchmarking
+
 ## [2.0.0] - 2025-12-18
 ### Added
  - Add non-numa (naive) stealer 
@@ -34,6 +44,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ### Added
  - Initial commit: Genisis of userspace schedular
 
+[3.0.0]: https://github.com/n33ll/userspace_schedular/commits/3.0.0
 [2.0.0]: https://github.com/n33ll/userspace_schedular/commits/2.0.0
 [1.1.0]: https://github.com/n33ll/userspace_schedular/commits/1.1.0
 [1.0.0]: https://github.com/n33ll/userspace_schedular/commits/1.0.0
