@@ -32,8 +32,7 @@ bool nonnuma_stealer<F>::get(fiber_t<F>*& m){
         queue<fiber_t<F>*>* q = _queues->at(i);
         
         if (q->dequeue(m)) {
-            std::cout << "stealer " << _stealer_id << " stole from queue " << i << std::endl;
-            return true;;
+            return true;
         }
     }
     m = nullptr;

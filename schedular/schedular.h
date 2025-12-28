@@ -9,6 +9,7 @@
 #include <thread>
 #include "queues/queue.h"
 #include "queues/spsc_queue.h"
+#include "queues/mpmc_queue.h"
 #include "runner/runner.h"
 #include "loaders/rr_loader.h"
 #include "loaders/a_hash_loader.h"
@@ -57,11 +58,8 @@ uxsched<F>::uxsched(int id, int queue_size){
     _threads.resize(_num_cores);
 
     for(int i{0}; i < _num_cores; ++i){
-        int numa_node = 0;
-        if (numa_available() >= 0) {
-            numa_node = numa_node_of_cpu(i);
-        }
-        spsc_queue<fiber_t<F>*>* q = new spsc_queue<fiber_t<F>*>(_queue_size, i, numa_node);
+        // mpmc cuz spsc doesnt make any sense.
+        mpmc_queue<fiber_t<F>*>* q = new mpmc_queue<fiber_t<F>*>();
         _queues[i] = q;
     }
 
@@ -92,6 +90,7 @@ uxsched<F>::~uxsched(){
         }
     }
     std::cout << "Destructor: All threads joined." << std::endl;
+    std::cout << ":P" << std::endl;
 }
 
 template <typename F>
@@ -106,7 +105,6 @@ fiber_t<F>* uxsched<F>::spawn(F func, int stack_size, int fiber_id, int cycle_bu
     f->cycle_budget = cycle_budget;
 
     // enqueue this f
-    std::cout << "enqueue fiber: " << f->fiber_id << std::endl;
     _loader->load(f);
     return f;
 }
