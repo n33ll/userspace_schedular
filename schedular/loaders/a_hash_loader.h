@@ -3,6 +3,8 @@
 
 #include "../fiber_t.h"
 #include "../queues/queue.h"
+#include <vector>
+#include <functional>
 
 template <typename F>
 class ah_loader{
@@ -13,8 +15,19 @@ private:
 
 public:
     ah_loader(int id, std::vector<queue<fiber_t<F>*>*>*& queues);
+
+    // Blocking load (guarantees enqueue before returning)
     void load(fiber_t<F>* f);
+
+    // Best-effort load to selected queue
+    bool try_load(fiber_t<F>* f, int q_id);
+
+    // Best-effort hashed load
+    bool try_load(fiber_t<F>* f);
+
+    // Blocking load to selected queue
     void load(fiber_t<F>* f, int q_id);
+
     void multi_load();
 };
 
@@ -22,20 +35,43 @@ template <typename F>
 ah_loader<F>::ah_loader(int id, std::vector<queue<fiber_t<F>*>*>*& queues){
     _loader_id = id;
     _queues = queues;
-    num_q = queues->size();
+    num_q = static_cast<int>(queues->size());
+}
+
+template <typename F>
+bool ah_loader<F>::try_load(fiber_t<F>* f, int q_id){
+    queue<fiber_t<F>*>* q = _queues->at(q_id);
+    return q->enqueue(f); // false if bounded queue is full
+}
+
+template <typename F>
+bool ah_loader<F>::try_load(fiber_t<F>* f){
+    int q_id = std::hash<int>()(f->fiber_id) % num_q;
+    return try_load(f, q_id);
 }
 
 template <typename F>
 void ah_loader<F>::load(fiber_t<F>* f){
-    int q_id = std::hash<int>()(f->fiber_id) % num_q;
-    queue<fiber_t<F>*>* q = _queues->at(q_id);
-    q->enqueue(f);
+    int start_q = std::hash<int>()(f->fiber_id) % num_q;
+    int q_id = start_q;
+
+    // Blocking + fallback probing:
+    // Try target queue first, then probe others before pausing.
+    while (true) {
+        if (try_load(f, q_id)) return;
+
+        q_id = (q_id + 1) % num_q;
+        if (q_id == start_q) {
+            _mm_pause(); // all queues looked full momentarily
+        }
+    }
 }
 
 template <typename F>
 void ah_loader<F>::load(fiber_t<F>* f, int q_id){
-    queue<fiber_t<F>*>* q = _queues->at(q_id);
-    q->enqueue(f);
+    while (!try_load(f, q_id)) {
+        _mm_pause();
+    }
 }
 
 static inline uint32_t fast_hash(uint64_t x) {
