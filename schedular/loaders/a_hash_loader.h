@@ -3,6 +3,7 @@
 
 #include "../fiber_t.h"
 #include "../queues/queue.h"
+#include <emmintrin.h>
 #include <vector>
 #include <functional>
 

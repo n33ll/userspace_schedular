@@ -11,6 +11,7 @@
 #include <atomic>
 #include "queues/queue.h"
 #include "queues/mpmc_queue.h"
+#include "queues/bounded_mpmc_queue.h"
 #include "runner/runner.h"
 #include "loaders/a_hash_loader.h"
 #include "fiber_t.h"
@@ -32,7 +33,7 @@ private:
     ah_loader<F>* _loader;
 
     // Global overflow queue for burst absorption
-    mpmc_queue<fiber_t<F>*>* _overflow_q;
+    queue<fiber_t<F>*>* _overflow_q;
 
     // Telemetry
     std::atomic<uint64_t> _submit_fast_ok{0};
@@ -81,11 +82,11 @@ uxsched<F>::uxsched(int id, int queue_size){
     size_t per_queue_capacity = (_queue_size > 0) ? static_cast<size_t>(_queue_size) : (1 << 16);
 
     for(int i = 0; i < _num_cores; ++i){
-        _queues[i] = new mpmc_queue<fiber_t<F>*>(per_queue_capacity);
+        _queues[i] = new bounded_mpmc_queue<fiber_t<F>*>(per_queue_capacity);
     }
 
     // overflow can be bigger than per-core queue
-    _overflow_q = new mpmc_queue<fiber_t<F>*>(per_queue_capacity * 4);
+    _overflow_q = new bounded_mpmc_queue<fiber_t<F>*>(per_queue_capacity * 4);
 
     std::vector<queue<fiber_t<F>*>*>* _qs_ptr = &_queues;
     _loader = new ah_loader<F>(_schedular_id, _qs_ptr);
