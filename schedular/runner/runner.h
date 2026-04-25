@@ -7,6 +7,7 @@
 #include <deque>
 #include <emmintrin.h>
 #include "../stealer/nonnuma_stealer.h"
+#include "../exp_backoff.h"
 
 // forward declare scheduler
 template <typename F>
@@ -49,6 +50,7 @@ runner<F>::runner(int id, queue<fiber_t<F>*>* queue, nonnuma_stealer<F>* stealer
 
 template <typename F>
 void runner<F>::run(){
+    exp_backoff _backoff;
     while(_running.load(std::memory_order_acquire)){
         fiber_t<F>* f = nullptr;
 
@@ -70,18 +72,20 @@ void runner<F>::run(){
                 if(!_sched->try_pop_overflow(f)){
                     // 4) work stealing
                     if(!_stealer->get(f)){
-                        _mm_pause();
+                        _backoff.wait();
                         continue;
                     }
                 }
             }
         }
-
+        _backoff.reset();
+        
         if (f == nullptr) {
-            _mm_pause();
+            _backoff.wait();
             continue;
         }
-
+        
+        _backoff.reset();
         _current_fiber = f;
         f->start_tsc = __rdtsc();
 
