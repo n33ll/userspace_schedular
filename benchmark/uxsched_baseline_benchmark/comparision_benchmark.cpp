@@ -17,9 +17,9 @@ int main() {
     std::cout << "\n🔥 ORDER BOOK WORKLOAD\n";
     std::cout << "════════════════════════════════════════════════════════════\n";
     
-    auto ob_uxsched_latencies = run_uxsched_benchmark<OrderBookWorkload>("UXSched", "OrderBook", 1000, 5);
+    auto ob_uxsched_latencies = run_uxsched_benchmark<OrderBookWorkload>("UXSched", "OrderBook", 10000, 50);
     std::cout << "\n";
-    auto ob_osthread_latencies = run_os_threads_benchmark<OrderBookWorkload>("OS Threads", "OrderBook", 1000, 5);
+    auto ob_osthread_latencies = run_os_threads_benchmark<OrderBookWorkload>("OS Threads", "OrderBook", 10000, 50);
     
     BenchmarkResult ob_uxsched = {"UXSched", "OrderBook", ob_uxsched_latencies};
     BenchmarkResult ob_osthread = {"OS Threads", "OrderBook", ob_osthread_latencies};
@@ -31,9 +31,9 @@ int main() {
     std::cout << "\n🔥 PIPELINE WORKLOAD\n";
     std::cout << "════════════════════════════════════════════════════════════\n";
     
-    auto pl_uxsched_latencies = run_uxsched_benchmark<PipelineWorkload>("UXSched", "Pipeline", 1000, 5);
+    auto pl_uxsched_latencies = run_uxsched_benchmark<PipelineWorkload>("UXSched", "Pipeline", 10000, 50);
     std::cout << "\n";
-    auto pl_osthread_latencies = run_os_threads_benchmark<PipelineWorkload>("OS Threads", "Pipeline", 1000, 5);
+    auto pl_osthread_latencies = run_os_threads_benchmark<PipelineWorkload>("OS Threads", "Pipeline", 10000, 50);
     
     BenchmarkResult pl_uxsched = {"UXSched", "Pipeline", pl_uxsched_latencies};
     BenchmarkResult pl_osthread = {"OS Threads", "Pipeline", pl_osthread_latencies};

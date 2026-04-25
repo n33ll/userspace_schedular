@@ -23,7 +23,7 @@ struct OrderBookWorkload {
         }
         
         // Direct call - no function pointer needed
-        if (sched) sched->safepoint_check(runner_id);
+        //if (sched) sched->safepoint_check(runner_id);
         
         // PHASE 3: Execute Match (5000-50000 cycles)
         volatile uint64_t match_result = 0;
@@ -54,7 +54,7 @@ struct PipelineWorkload {
         for (int i = 0; i < 1000 + (task_id % 4000); ++i) {
             parsed = parsed * 31 + i;
         }
-        if (sched) sched->safepoint_check(runner_id);
+        //if (sched) sched->safepoint_check(runner_id);
         
         // STAGE 2: Validate (2000-8000 cycles)
         volatile bool valid = (parsed % 100) != 0;
@@ -62,7 +62,7 @@ struct PipelineWorkload {
             valid = (valid && i < 5000);
         }
         if (!valid) return;
-        if (sched) sched->safepoint_check(runner_id);
+        //if (sched) sched->safepoint_check(runner_id);
         
         // STAGE 3: Process (10000-50000 cycles)
         volatile uint64_t result = 0;
@@ -70,7 +70,7 @@ struct PipelineWorkload {
         for (int i = 0; i < iterations; ++i) {
             result = (result * 1103515245 + 12345) ^ (task_id + i);
             if (i % 5000 == 0 && sched) {
-                sched->safepoint_check(runner_id);
+                //sched->safepoint_check(runner_id);
             }
         }
         
@@ -79,6 +79,6 @@ struct PipelineWorkload {
         for (int i = 0; i < 5000 + (task_id % 10000); ++i) {
             serialized = serialized * 17 + (result + i) % 256;
         }
-        if (sched) sched->safepoint_check(runner_id);
+        //if (sched) sched->safepoint_check(runner_id);
     }
 };
