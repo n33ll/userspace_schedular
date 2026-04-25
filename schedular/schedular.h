@@ -17,6 +17,7 @@
 #include "fiber_t.h"
 #include "stealer/nonnuma_stealer.h"
 #include <sched.h>
+#include "exp_backoff.h"
 
 template <typename F>
 class uxsched{
@@ -34,6 +35,8 @@ private:
 
     // Global overflow queue for burst absorption
     queue<fiber_t<F>*>* _overflow_q;
+
+    exp_backoff _backoff;
 
     // Telemetry
     std::atomic<uint64_t> _submit_fast_ok{0};
@@ -167,14 +170,16 @@ fiber_t<F>* uxsched<F>::spawn(F func, int stack_size, int fiber_id, int cycle_bu
 
         if (_loader->try_load(f)) {
             _submit_fast_ok.fetch_add(1, std::memory_order_relaxed);
+            _backoff.reset();
             return f;
         }
         if (_overflow_q->enqueue(f)) {
             _submit_overflow_ok.fetch_add(1, std::memory_order_relaxed);
+            _backoff.reset();
             return f;
         }
 
-        _mm_pause();
+        _backoff.wait();
     }
 }
 
