@@ -71,8 +71,7 @@ std::vector<uint64_t> run_uxsched_benchmark(const std::string& sched_name,
                     p->set_value(end_time - spawn_time);
                 },
                 64 * 1024,
-                this_task_id,
-                100000
+                this_task_id
             );
 
             ++submitted;
