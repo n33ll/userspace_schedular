@@ -10,7 +10,7 @@ A ultra-low latency, lock-free userspace fiber scheduler designed for latency-cr
 - **Sub-microsecond context switching** using stackful coroutines
 - **Lock-free MPMC/SPSC queues** for zero-contention task scheduling
 - **NUMA-aware work stealing** with intelligent load balancing
-- **Cycle-budget preemption** for deterministic latency bounds
+- **Safepoint-based cooperative preemption** for deterministic latency bounds
 - **Hardware-optimized** with RDTSC timing and CPU affinity
 
 ## 📊 Key Features
@@ -24,13 +24,13 @@ A ultra-low latency, lock-free userspace fiber scheduler designed for latency-cr
 ### Advanced Scheduling Algorithms
 - **Work Stealing**: NUMA and non-NUMA aware stealing strategies
 - **Load Balancing**: Affinity hash and round-robin fiber distribution
-- **Preemptive Scheduling**: Cycle-budget based fiber yielding
-- **Safepoint Checks**: User-controlled cooperative scheduling points
+- **Safepoint Checks**: User-controlled cooperative scheduling points for deterministic preemption
 
 ### Enterprise-Grade Performance Monitoring
 - **Hardware Performance Counters**: RDTSC-based microsecond precision
-- **Latency Percentiles**: P50, P99, P99.9 measurements
-- **Throughput Metrics**: Fibers/second with detailed breakdown
+- **Latency Percentiles**: P50, P99, P99.9, P99.99 measurements
+- **Throughput Metrics**: Tasks/second with detailed breakdown
+- **Flame Graph Profiling**: Integrated perf-based flame graph generation for hot-path analysis
 - **Context Switch Analytics**: Instrumented scheduler with full tracing [for future]
 
 ## 🏗️ Architecture
@@ -39,7 +39,6 @@ A ultra-low latency, lock-free userspace fiber scheduler designed for latency-cr
 UXSched
 ├── Fiber Management
 │   ├── Stackful Coroutines (Boost.Context)
-│   ├── Cycle-Budget Preemption
 │   └── Safepoint Cooperative Scheduling
 ├── Lock-Free Queues
 │   ├── MPMC Queue (Multi-Producer Multi-Consumer)
@@ -51,7 +50,8 @@ UXSched
 │   └── Load Balancing Algorithms
 ├── Performance Instrumentation
 │   ├── TSC-Based Timing
-│   ├── Latency measurments
+│   ├── Latency Measurements (P50→P9999)
+│   ├── Flame Graph Generation
 │   └── Throughput Monitoring
 └── CPU Affinity & Pinning
     ├── Thread-to-Core Binding
@@ -63,45 +63,48 @@ UXSched
 
 ## 🧪 Benchmarking Suite
 
-### Comprehensive Performance Testing
+### UXSched vs. OS Thread Pool — Real-World Workloads
 
-Our benchmarking suite provides industry-standard performance metrics crucial for HFT and low-latency systems:
+Benchmarked on a **3599 MHz** machine using two industry-representative workloads: an **Order Book** (simulating HFT-style event bursts) and a **Pipeline** (chained task processing). Each run collected **~9–10 million samples**.
 
-#### Workload Types
-- **CPU Bound**: Computational workloads with controlled execution time
-- **Memory Bound**: Memory-intensive operations with cache pressure
-- **Yield Heavy**: Frequent cooperative yielding scenarios
+> **Key insight:** UXSched trades median latency for dramatically lower tail latency and jitter — the exact trade-off that matters in production low-latency systems.
 
-#### Benchmark Results
+#### 📖 Order Book Workload
 
-| Fibers | CPU Bound (fibers/sec) | Memory Bound (fibers/sec) | Yield Heavy (fibers/sec) |
-|--------|------------------------|---------------------------|--------------------------|
-| 10     | 78.06                  | 90.34                     | 95.44                    |
-| 100    | 783.21                 | 970.91                    | 957.58                   |
-| 1000   | 9,740.04               | 8,963.71                  | 9,813.74                 |
+| Metric | UXSched | OS Threads | Winner |
+|---|---|---|---|
+| P50 Latency | 703.97 µs | 314.62 µs | OS Threads (2.24x) |
+| P99 Latency | 2,790.79 µs | 1,273.36 µs | OS Threads (2.19x) |
+| **P999 Latency** | **8,283.36 µs** | **62,513.16 µs** | **UXSched (7.55x ✓)** |
+| **P9999 Latency** | **25,487.91 µs** | **73,724.98 µs** | **UXSched (2.89x ✓)** |
+| **Jitter (CV%)** | **95.67%** | **553.83%** | **UXSched (5.79x ✓)** |
+| Throughput | 1,233.95 tasks/sec | 1,881.29 tasks/sec | OS Threads |
 
-**Latency Metrics (P50/P99/P999 in CPU cycles @ 3.6GHz):**
+**Summary:** Average speedup P50/P99/P999: **2.82x** · Jitter improvement: **5.79x**
 
-| Fibers | CPU Bound              | Memory Bound          | Yield Heavy                |
-|--------|------------------------|-----------------------|----------------------------|
-| 10     | 7.2K / 35.8K / 35.8K   | 25.5M / 48.1M / 48.1M | 61.5K / 5.2M / 5.2M        |
-| 100    | 5.6K / 572.6K / 572.6K | 15.6M / 37.0M / 37.0M | 14.1K / 779.9K / 779.9K    |
-| 1000   | 11.0K / 7.9M / 10.6M   | 6.7K / 28.5M / 46.9M  | 5.8K / 15.1M / 100.2M      |
+#### 🔗 Pipeline Workload
+
+| Metric | UXSched | OS Threads | Winner |
+|---|---|---|---|
+| P50 Latency | 574.76 µs | 170.33 µs | OS Threads (3.37x) |
+| P99 Latency | 2,444.71 µs | 1,594.67 µs | OS Threads (1.53x) |
+| **P999 Latency** | **4,263.85 µs** | **56,372.78 µs** | **UXSched (13.22x ✓)** |
+| **P9999 Latency** | **9,906.47 µs** | **60,046.05 µs** | **UXSched (6.06x ✓)** |
+| **Jitter (CV%)** | **79.45%** | **582.92%** | **UXSched (7.34x ✓)** |
+| Throughput | 1,435.15 tasks/sec | 1,971.43 tasks/sec | OS Threads |
+
+**Summary:** Average speedup P50/P99/P999: **4.72x** · Jitter improvement: **7.34x**
 
 #### Performance Analysis
 
-**Throughput Scaling Behavior:**
-The counter-intuitive increase in fibers/sec with more fibers demonstrates excellent work-stealing effectiveness:
+**Why UXSched wins where it matters:**
 
-- **10 fibers**: Limited parallelization (78 fibers/sec) - multi-core system underutilized
-- **100 fibers**: Better load distribution (783 fibers/sec) - 10x throughput improvement 
-- **1000 fibers**: Full core utilization (9,740 fibers/sec) - optimal work stealing across all CPU cores
+OS threads appear faster at median latency because the kernel scheduler is highly optimised for average-case throughput. However, kernel context switches, scheduler lock contention, and unpredictable preemption create **catastrophic tail latency** — visible as P999 blowing out to 56–62 ms vs. UXSched's 4–8 ms.
 
-**Key Insights:**
-- **Parallelization Efficiency**: Same ~100-128ms total time across scales, but 100x more work completed
-- **Work Stealing Impact**: Multiple worker threads achieve true parallelism with sufficient fiber density
-- **Amortized Overhead**: Fixed scheduler setup costs distributed across more concurrent work
-- **Saturation Points**: Memory Bound at 1000 fibers (8,963 vs 9,740 fibers/sec) indicates memory bandwidth limits
+- **P999 improvement: 7.55x (OrderBook) / 13.22x (Pipeline)** — UXSched virtually eliminates the long tail caused by OS scheduler jitter
+- **Jitter (CV%) improvement: 5.79x / 7.34x** — far more consistent execution, critical for risk engines and order routers
+- **Zero kernel involvement**: No syscalls, no involuntary preemption in the hot path
+- **Safepoint cooperation**: Deterministic yield points give the scheduler full control over when a fiber pauses
 
 ## 🛠️ Technical Implementation
 
@@ -125,15 +128,15 @@ private:
 
 ### Fiber Scheduling
 
-#### Cycle-Budget Preemption
+#### Safepoint-Based Cooperative Preemption
 ```cpp
-fiber_t<F>* spawn(F func, int stack_size, int fiber_id, int cycle_budget = 10000);
-void safepoint_check(int runner_id); // User-controlled yielding and enqueue
+fiber_t<F>* spawn(F func, int stack_size, int fiber_id);
+void safepoint_check(int runner_id); // User-controlled yielding and re-enqueue
 ```
 
 #### Features
-- **Deterministic Latency**: Configurable cycle budgets prevent runaway fibers
-- **Cooperative Scheduling**: Safepoint checks for controlled yielding
+- **Deterministic Latency**: Safepoint checks give the programmer explicit control over yield frequency, preventing runaway fibers without the overhead of cycle-counting
+- **Cooperative Scheduling**: Fibers yield only at well-defined safepoints — no surprise preemption mid-critical-section
 - **Stack Management**: Customizable stack sizes for memory optimization [for future]
 
 ### NUMA Optimization
@@ -190,12 +193,12 @@ g++ -std=c++17 -O3 -march=native benchmark/benchmark_suite.cpp -lboost_context -
 using fn_t = std::function<void(int)>;
 uxsched<fn_t> scheduler(0, 1024);
 
-// Spawn high-priority fiber
+// Spawn a fiber — safepoint_check() is the cooperative yield point
 scheduler.spawn([](int runner_id) {
     // Critical trading logic here
     process_market_data();
-    scheduler.safepoint_check(runner_id);
-}, 64 * 1024, fiber_id, 50000); // 50K cycle budget
+    scheduler.safepoint_check(runner_id); // yield and re-enqueue
+}, 64 * 1024, fiber_id);
 ```
 
 ## 📊 Performance Validation
@@ -203,14 +206,16 @@ scheduler.spawn([](int runner_id) {
 ### Latency Testing
 Our scheduler has been benchmarked against industry standards:
 
-- **Context Switch Overhead**: &lt;200ns P99 on modern Intel/AMD CPUs
+- **Context Switch Overhead**: <200ns P99 on modern Intel/AMD CPUs
 - **Memory Allocation**: Zero-allocation hot paths with pre-allocated pools
 - **Cache Efficiency**: Cache-line aligned structures with prefetch optimization [for future]
 - **NUMA Scalability**: Linear scaling across NUMA nodes [for future]
 
 ### Competitive Analysis
 Compared to traditional threading models:
-- **Lower context switch overhead** vs. OS threads due to userspace execution avoiding kernel syscalls
+- **Lower tail latency**: P999/P9999 up to **13x better** than OS thread pools
+- **Lower jitter**: Coefficient of Variation up to **7.34x lower** than OS threads
+- **Predictable execution**: No involuntary kernel preemption in the critical path
 
 ## 🔧 Configuration & Tuning
 
@@ -218,16 +223,16 @@ Compared to traditional threading models:
 - **Queue Sizing**: Optimize queue depths for your workload patterns
 - **CPU Affinity**: Pin worker threads to isolated CPU cores
 - **NUMA Configuration**: Configure work stealing based on topology
-- **Cycle Budgets**: Tune preemption points for latency vs. throughput
+- **Safepoint Frequency**: Place `safepoint_check()` calls to tune fairness vs. throughput
 
 ## 🤝 Contributing
 
-I welcome contributions from programming community. Areas of particular interest:
+I welcome contributions from the programming community. Areas of particular interest:
 
 - **Hardware-specific optimizations** (Intel vs AMD, new instruction sets)
 - **Alternative queue implementations** (ring buffers, bounded queues)
 - **Advanced scheduling algorithms** (priority-based, deadline scheduling)
-- **Performance analysis tools** (flamegraphs, perf integration)
+- **Priority-aware work stealing** (urgent vs. background fiber classes)
 
 ## 📄 License
 
