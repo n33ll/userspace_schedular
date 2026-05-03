@@ -51,10 +51,10 @@ public:
     ~uxsched();
 
     // Guaranteed delivery
-    fiber_t<F>* spawn(F func, int stack_size, int fiber_id, int cycle_budget = 10000);
+    fiber_t<F>* spawn(F func, int stack_size, int fiber_id);
 
     // Non-blocking best effort
-    bool try_spawn(F func, int stack_size, int fiber_id, int cycle_budget = 10000);
+    bool try_spawn(F func, int stack_size, int fiber_id);
 
     void safepoint_check(int runner_id);
 
@@ -119,12 +119,12 @@ uxsched<F>::~uxsched(){
 }
 
 template <typename F>
-bool uxsched<F>::try_spawn(F func, int stack_size, int fiber_id, int cycle_budget){
+bool uxsched<F>::try_spawn(F func, int stack_size, int fiber_id){
     fiber_t<F>* f = new fiber_t<F>();
     f->func = std::move(func);
     f->stack_size = stack_size;
     f->fiber_id = fiber_id;
-    f->cycle_budget = cycle_budget;
+    //f->cycle_budget = cycle_budget;
 
     // Fast path: hashed queue
     if (_loader->try_load(f)) {
@@ -145,12 +145,12 @@ bool uxsched<F>::try_spawn(F func, int stack_size, int fiber_id, int cycle_budge
 }
 
 template <typename F>
-fiber_t<F>* uxsched<F>::spawn(F func, int stack_size, int fiber_id, int cycle_budget){
+fiber_t<F>* uxsched<F>::spawn(F func, int stack_size, int fiber_id){
     fiber_t<F>* f = new fiber_t<F>();
     f->func = std::move(func);
     f->stack_size = stack_size;
     f->fiber_id = fiber_id;
-    f->cycle_budget = cycle_budget;
+    //f->cycle_budget = cycle_budget;
 
     // 1) fast path
     if (_loader->try_load(f)) {
@@ -189,8 +189,8 @@ void uxsched<F>::safepoint_check(int runner_id){
     _workers[runner_id]->get_current_fiber(f);
     if(!f) return;
 
-    uint64_t now = __rdtsc();
-    if(now - f->start_tsc < f->cycle_budget) return;
+    // uint64_t now = __rdtsc();
+    // if(now - f->start_tsc < f->cycle_budget) return;
 
     f->yeild = true;
     f->runner_ctx = std::move(f->runner_ctx).resume();

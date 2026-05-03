@@ -87,7 +87,7 @@ void runner<F>::run(){
         
         _backoff.reset();
         _current_fiber = f;
-        f->start_tsc = __rdtsc();
+        //f->start_tsc = __rdtsc();
 
         if(!f->context_initialized){
             f->context_initialized = true;
