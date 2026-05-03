@@ -3,6 +3,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.0.0] - 2026-05-03
+### Added
+ - Benchmark: Add Flamegraph and Various results
+ - safepoint_check: remove the cycle-budget logic
+ - Benchmark: update the latency measuments to use promises.
+ - Add exponential backoff rather than using _mM_pause()
+ - Make bounded MPMC queue with array reporposed as queue
+ - Re-Vamp the scheduler
+ - Add baseline vs uxsched benchmarking over two types of workloads
+
 ## [3.0.0] - 2025-12-28
 ### Added
  - Update dequeue to handle concurrent calls
@@ -44,6 +54,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ### Added
  - Initial commit: Genisis of userspace schedular
 
+[4.0.0]: https://github.com/n33ll/userspace_schedular/commits/4.0.0
 [3.0.0]: https://github.com/n33ll/userspace_schedular/commits/3.0.0
 [2.0.0]: https://github.com/n33ll/userspace_schedular/commits/2.0.0
 [1.1.0]: https://github.com/n33ll/userspace_schedular/commits/1.1.0
