@@ -3,6 +3,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [4.1.0] - 2026-05-06
+### Added
+ - Update schedular to add stack to fiber and fiber pools
+ - add new benchmark suite: throughput saturation + task capacity
+
 ## [4.0.0] - 2026-05-03
 ### Added
  - Benchmark: Add Flamegraph and Various results
@@ -54,6 +59,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ### Added
  - Initial commit: Genisis of userspace schedular
 
+[4.1.0]: https://github.com/n33ll/userspace_schedular/commits/4.1.0
 [4.0.0]: https://github.com/n33ll/userspace_schedular/commits/4.0.0
 [3.0.0]: https://github.com/n33ll/userspace_schedular/commits/3.0.0
 [2.0.0]: https://github.com/n33ll/userspace_schedular/commits/2.0.0
