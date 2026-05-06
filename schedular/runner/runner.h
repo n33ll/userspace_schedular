@@ -2,10 +2,12 @@
 #define RUNNER_H
 
 #include "../fiber_t.h"
+#include "../fiber_pool.h"
 #include "../queues/queue.h"
 #include <atomic>
 #include <deque>
 #include <emmintrin.h>
+#include <boost/context/preallocated.hpp>
 #include "../stealer/nonnuma_stealer.h"
 #include "../exp_backoff.h"
 
@@ -91,11 +93,18 @@ void runner<F>::run(){
 
         if(!f->context_initialized){
             f->context_initialized = true;
-            f->f_ctx = boost::context::callcc([f, this](boost::context::continuation&& runner_ctx){
-                f->runner_ctx = std::move(runner_ctx);
-                f->func(_runner_id);
-                return std::move(f->runner_ctx);
-            });
+            // Use the pool's pre-allocated stack — no mmap on the hot path.
+            // pool_stack_allocator's deallocate() is a no-op so boost won't
+            // munmap our pool-owned stack on context completion.
+            boost::context::preallocated palloc(
+                f->sctx.sp, f->sctx.size, f->sctx);
+            f->f_ctx = boost::context::callcc(
+                std::allocator_arg, palloc, pool_stack_allocator{},
+                [f, this](boost::context::continuation&& runner_ctx){
+                    f->runner_ctx = std::move(runner_ctx);
+                    f->func(_runner_id);
+                    return std::move(f->runner_ctx);
+                });
         } else {
             f->f_ctx = std::move(f->f_ctx).resume();
         }
@@ -107,8 +116,8 @@ void runner<F>::run(){
             f->yeild = false;
             _hot_local.push_back(f);
         } else {
-            // TODO Day2: reclaim/pool fiber here to avoid leaks
-            delete f;  // only if safe with your lifecycle model
+            // Return fiber + stack to pool — no munmap on the hot path.
+            _sched->get_fiber_pool().release(f);
         }
     }
 }

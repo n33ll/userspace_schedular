@@ -12,15 +12,17 @@
 #include "queues/queue.h"
 #include "queues/mpmc_queue.h"
 #include "queues/bounded_mpmc_queue.h"
+#include "scheduler_interface.h"
+#include "fiber_t.h"
+#include "fiber_pool.h"
 #include "runner/runner.h"
 #include "loaders/a_hash_loader.h"
-#include "fiber_t.h"
 #include "stealer/nonnuma_stealer.h"
 #include <sched.h>
 #include "exp_backoff.h"
 
 template <typename F>
-class uxsched{
+class uxsched : public IScheduler {
 private:
     int _schedular_id;
     int _queue_size;
@@ -35,6 +37,9 @@ private:
 
     // Global overflow queue for burst absorption
     queue<fiber_t<F>*>* _overflow_q;
+
+    // Fiber + stack pool — eliminates per-task malloc/mmap
+    fiber_pool<F>* _fiber_pool;
 
     exp_backoff _backoff;
 
@@ -56,12 +61,14 @@ public:
     // Non-blocking best effort
     bool try_spawn(F func, int stack_size, int fiber_id);
 
-    void safepoint_check(int runner_id);
+    void safepoint_check(int runner_id) override;
 
-    // worker helper
+    // worker helpers
     bool try_pop_overflow(fiber_t<F>*& f) {
         return _overflow_q->dequeue(f);
     }
+
+    fiber_pool<F>& get_fiber_pool() { return *_fiber_pool; }
 
     void print_submit_stats() const {
         std::cout << "[submit] fast_ok=" << _submit_fast_ok.load()
@@ -95,6 +102,9 @@ uxsched<F>::uxsched(int id, int queue_size){
     _loader = new ah_loader<F>(_schedular_id, _qs_ptr);
     _stealer = new nonnuma_stealer<F>(_schedular_id, _qs_ptr);
 
+    // Pre-warm pool: num_cores * 256 fibers so steady-state runs without mmap.
+    _fiber_pool = new fiber_pool<F>(_num_cores * 256);
+
     for(int i = 0; i < _num_cores; ++i){
         _workers[i] = new runner<F>(i, _queues[i], _stealer, this);
         _threads[i] = std::thread(&runner<F>::run, _workers[i]);
@@ -116,13 +126,13 @@ uxsched<F>::~uxsched(){
     delete _overflow_q;
     delete _stealer;
     delete _loader;
+    delete _fiber_pool;
 }
 
 template <typename F>
 bool uxsched<F>::try_spawn(F func, int stack_size, int fiber_id){
-    fiber_t<F>* f = new fiber_t<F>();
+    fiber_t<F>* f = _fiber_pool->acquire();
     f->func = std::move(func);
-    f->stack_size = stack_size;
     f->fiber_id = fiber_id;
     //f->cycle_budget = cycle_budget;
 
@@ -138,17 +148,16 @@ bool uxsched<F>::try_spawn(F func, int stack_size, int fiber_id){
         return true;
     }
 
-    // could not submit
-    delete f;
+    // could not submit — return fiber to pool instead of freeing
+    _fiber_pool->release(f);
     _submit_fail.fetch_add(1, std::memory_order_relaxed);
     return false;
 }
 
 template <typename F>
 fiber_t<F>* uxsched<F>::spawn(F func, int stack_size, int fiber_id){
-    fiber_t<F>* f = new fiber_t<F>();
+    fiber_t<F>* f = _fiber_pool->acquire();
     f->func = std::move(func);
-    f->stack_size = stack_size;
     f->fiber_id = fiber_id;
     //f->cycle_budget = cycle_budget;
 

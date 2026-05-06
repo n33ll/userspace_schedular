@@ -27,7 +27,6 @@ private:
     alignas(64) std::atomic<size_t> _dequeue_pos;
 
     alignas(64) std::atomic<bool> _closed;
-    alignas(64) std::atomic<int> _size;
 
     static size_t next_pow2(size_t x) {
         if (x < 2) return 2;
@@ -50,8 +49,7 @@ public:
           _buffer(nullptr),
           _enqueue_pos(0),
           _dequeue_pos(0),
-          _closed(false),
-          _size(0) {
+          _closed(false) {
         _buffer = static_cast<cell_t*>(::operator new[](sizeof(cell_t) * _capacity));
         for (size_t i = 0; i < _capacity; ++i) {
             new (&_buffer[i]) cell_t{};
@@ -95,7 +93,6 @@ public:
 
         cell->data = m;
         cell->sequence.store(pos + 1, std::memory_order_release);
-        _size.fetch_add(1, std::memory_order_relaxed);
         return true;
     }
 
@@ -126,7 +123,6 @@ public:
 
         m = cell->data;
         cell->sequence.store(pos + _mask + 1, std::memory_order_release);
-        _size.fetch_sub(1, std::memory_order_relaxed);
         return true;
     }
 
@@ -139,7 +135,7 @@ public:
     }
 
     int size() const override {
-        return _size.load(std::memory_order_relaxed);
+        return 0;
     }
 };
 
