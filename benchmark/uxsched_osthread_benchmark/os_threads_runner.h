@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <system_error>
+#include <pthread.h>
 
 // ============================================================================
 // RSS helper (Linux /proc/self/status)
@@ -121,6 +122,11 @@ double run_os_throughput(int N, int num_workers) {
 // an atomic go flag is set.  Reports how many threads were actually created
 // (thread creation fails with EAGAIN beyond the OS limit), peak RSS, and
 // wall-clock time to complete once the gate opens.
+//
+// Uses pthread_create directly with a 64 KB stack — matching UXSched's fiber
+// stack size — so the comparison is stack-neutral and any failure reflects
+// true kernel per-thread resource exhaustion (task_struct, kernel stack,
+// scheduler structures) rather than virtual address space from 8 MB defaults.
 // ============================================================================
 
 struct CapacityResult {
@@ -130,35 +136,50 @@ struct CapacityResult {
     double gate_to_done_ms;
 };
 
+struct OsTaskArg {
+    std::atomic<bool>* go;
+    std::atomic<int>*  completed;
+    int                id;
+};
+
+static void* os_task_fn(void* arg_ptr) {
+    auto* a = static_cast<OsTaskArg*>(arg_ptr);
+    while (!a->go->load(std::memory_order_relaxed))
+        sched_yield();
+    volatile uint64_t x = static_cast<uint64_t>(a->id);
+    for (int i = 0; i < 50; ++i) x = x * 1103515245ULL + 12345ULL;
+    (void)x;
+    a->completed->fetch_add(1, std::memory_order_relaxed);
+    delete a;
+    return nullptr;
+}
+
 CapacityResult run_os_capacity(int target_n) {
     std::atomic<bool> go{false};
     std::atomic<int>  completed{0};
 
-    auto task = [&](int id) {
-        // Spin until gate opens — equivalent to the fiber's safepoint loop.
-        while (!go.load(std::memory_order_relaxed))
-            std::this_thread::yield();
-        // Minimal work after release.
-        volatile uint64_t x = static_cast<uint64_t>(id);
-        for (int i = 0; i < 50; ++i) x = x * 1103515245ULL + 12345ULL;
-        (void)x;
-        completed.fetch_add(1, std::memory_order_relaxed);
-    };
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    // Match UXSched fiber stack size for a stack-neutral comparison.
+    pthread_attr_setstacksize(&attr, 64 * 1024);
 
     double rss_before = static_cast<double>(get_rss_kb());
 
-    std::vector<std::thread> threads;
-    threads.reserve(target_n);
+    std::vector<pthread_t> tids;
+    tids.reserve(target_n);
     int created = 0;
     for (int i = 0; i < target_n; ++i) {
-        try {
-            threads.emplace_back(task, i);
-            ++created;
-        } catch (const std::system_error&) {
-            // OS refused to create more threads.
+        auto* arg = new OsTaskArg{&go, &completed, i};
+        pthread_t tid;
+        int rc = pthread_create(&tid, &attr, os_task_fn, arg);
+        if (rc != 0) {
+            delete arg;
             break;
         }
+        tids.push_back(tid);
+        ++created;
     }
+    pthread_attr_destroy(&attr);
 
     // Brief settle — let all spawned threads reach their spin loop.
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -173,7 +194,7 @@ CapacityResult run_os_capacity(int target_n) {
     auto t1 = std::chrono::steady_clock::now();
     double gate_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
 
-    for (auto& t : threads) t.join();
+    for (pthread_t tid : tids) pthread_join(tid, nullptr);
 
     return {created, rss_before, rss_peak, gate_ms};
 }
